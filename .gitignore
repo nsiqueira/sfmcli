@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# sqlite3 stuff:
+db.db
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# venv
+venv/
+env/
+
+# config
+config.json
+
+# log
+log.log
+
+# mypy
+.mypy_cache/
