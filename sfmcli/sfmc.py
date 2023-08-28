@@ -404,7 +404,7 @@ def populate(origin, target):
         logger.info(' executing pipeline')
         data_extesion_pages = list(
             session.query(DataExtensionPage).filter_by(
-                status='failed',
+                status='new',
             ).join(DataExtensionPage.data_extension),
         )
 
