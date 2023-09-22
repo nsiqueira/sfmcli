@@ -71,7 +71,7 @@ def get_access_token(config):
         return response['access_token']
     except requests.exceptions.RequestException as e:
         logger.exception(
-            f"access_token for {config.name}. exception {e}",
+            f'access_token for {config.name}. exception {e}',
         )
 
 
@@ -170,7 +170,7 @@ def get_pages(data_extension, config):
             session.commit()
     except Exception as e:
         logger.exception(
-            f"get pages {data_extension.id}. exception {e}",
+            f'get pages {data_extension.id}. exception {e}',
         )
 
 
@@ -189,7 +189,7 @@ def get_page_items_and_append_target_data(data_extension_page, origin, target):
         )
         session.commit()
         logger.exception(
-            f"get page items {data_extension_page.id}. exception {e}",  # noqa: E501
+            f'get page items {data_extension_page.id}. exception {e}',  # noqa: E501
         )
 
 
@@ -234,7 +234,7 @@ def create_page_items(data_extension_page, items, target):
         ).update({'status': 'failed'})
         session.commit()
         logger.exception(
-            f"create items {data_extension_page.id}. exception {e}",
+            f'create items {data_extension_page.id}. exception {e}',
         )
 
 
@@ -278,7 +278,7 @@ def clean_data_extension(data_extension, target):
         return 1
     except Exception as e:
         logger.exception(
-            f"clean {data_extension.id}. exception {e}",
+            f'clean {data_extension.id}. exception {e}',
         )
 
 
@@ -352,7 +352,7 @@ def generate_report_for_data_extension(data_extension, target):
 
         except Exception as e:
             logger.exception(
-                f"report {page.id}. exception {e}",
+                f'report {page.id}. exception {e}',
             )
 
     return reports
@@ -401,14 +401,15 @@ def populate(origin, target, update_only):
 
         logger.info('executing pipeline')
         data_extension_pages = list(
-                session.query(DataExtensionPage).filter_by(
-                    status='processed',
-                ).join(DataExtensionPage.data_extension),
-            )
+            session.query(DataExtensionPage).filter_by(
+                status='new',
+            ).join(DataExtensionPage.data_extension),
+        )
 
         if update_only:
-            data_extension_pages = [page for page in data_extension_pages if page.has_sfmc_key]
-
+            data_extension_pages = [
+                page for page in data_extension_pages if page.has_sfmc_key
+            ]
 
         if len(data_extension_pages) == 0:
             logger.info(
