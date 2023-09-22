@@ -71,7 +71,7 @@ def get_access_token(config):
         return response['access_token']
     except requests.exceptions.RequestException as e:
         logger.exception(
-            f"couldn't get access_token for {config}. exception {e}",
+            f"access_token for {config.name}. exception {e}",
         )
 
 
@@ -114,20 +114,19 @@ def get_dynamic_size(record):
     size = len(str(record).encode('utf-8'))
 
     if size > 3000:
-        return 500
+        return 100
 
     if size > 1500:
-        return 1000
+        return 500
 
     if len(record['values']) > 20:
-        return 1500
+        return 1000
 
     return 2500
 
 
 def get_pages(data_extension, config):
-    logger.info(f' getting pages for {data_extension.name}')
-    logger.debug(f'getting pages for {data_extension}')
+    logger.info(f'get pages {data_extension.id}')
 
     base_url = f"https://{config['subdomain']}.rest.marketingcloudapis.com/data/v1/customobjectdata/key/{data_extension.origin_external_key}/rowset?$pageSize={1}"  # noqa: E501
 
@@ -137,8 +136,12 @@ def get_pages(data_extension, config):
 
         count = response['count']
 
+        if count > 5000000:
+            logger.info(f'skipped too many records {data_extension.id}')
+            return 0
+
         if not count > 0:
-            logger.info(f' skipped {data_extension} because it has no items')
+            logger.info(f'skipped no rows {data_extension.id}')
             return 0
 
         sample_record = response['items'][0]
@@ -167,13 +170,12 @@ def get_pages(data_extension, config):
             session.commit()
     except Exception as e:
         logger.exception(
-            f"couldn't get pages for {data_extension}. exception {e}",
+            f"get pages {data_extension.id}. exception {e}",
         )
 
 
 def get_page_items_and_append_target_data(data_extension_page, origin, target):
-    logger.info(f' getting pages items for {data_extension_page.url}')
-    logger.debug(f'getting page items for {data_extension_page}')
+    logger.info(f'get page items {data_extension_page.id}')
 
     try:
         headers = {'Authorization': f'Bearer {get_access_token(origin)}'}
@@ -187,13 +189,12 @@ def get_page_items_and_append_target_data(data_extension_page, origin, target):
         )
         session.commit()
         logger.exception(
-            f"couldn't get page items for {data_extension_page}. exception {e}",  # noqa: E501
+            f"get page items {data_extension_page.id}. exception {e}",  # noqa: E501
         )
 
 
 def create_page_items(data_extension_page, items, target):
-    logger.info(f' creating items for {data_extension_page.url}')
-    logger.debug(f'creating items for {data_extension_page}')
+    logger.info(f'create items {data_extension_page.id}')
 
     has_sfmc_key = data_extension_page.has_sfmc_key
 
@@ -233,13 +234,13 @@ def create_page_items(data_extension_page, items, target):
         ).update({'status': 'failed'})
         session.commit()
         logger.exception(
-            f"couldn't create items for {data_extension_page}. exception {e}",
+            f"create items {data_extension_page.id}. exception {e}",
         )
 
 
 def clean_data_extension(data_extension, target):
     try:
-        logger.info(f' clean data extension {data_extension.name}')
+        logger.info(f'clean data extension {data_extension.name}')
         if data_extension is not None:
             headers = {
                 'Content-Type': 'application/soap+xml; charset=UTF-8',
@@ -277,13 +278,12 @@ def clean_data_extension(data_extension, target):
         return 1
     except Exception as e:
         logger.exception(
-            f"couldn't clean data extension {data_extension}. exception {e}",
+            f"clean {data_extension.id}. exception {e}",
         )
 
 
 def generate_report_for_data_extension(data_extension, target):
-    logger.info(f'generating report for {data_extension.name}')
-    logger.debug(f'generating report for {data_extension.name}')
+    logger.info(f'report {data_extension.name}')
 
     pages = list(
         session.query(DataExtensionPage).filter_by(
@@ -352,28 +352,26 @@ def generate_report_for_data_extension(data_extension, target):
 
         except Exception as e:
             logger.exception(
-                f"couldn't generate report for page {page.url}. exception {e}",
+                f"report {page.id}. exception {e}",
             )
-
-    logger.debug(reports)
 
     return reports
 
 
-def populate(origin, target):
+def populate(origin, target, update_only):
     initialize_database()
     start_time = datetime.now()
-    logger.info(' start of populate')
+    logger.info('start of populate')
 
-    logger.info(' getting data extensions with origin info')
+    logger.info('getting data extensions with origin info')
     get_data_extensions_with_origin_info(origin)
 
-    logger.info(' updating data extensions with target info')
+    logger.info('updating data extensions with target info')
     update_data_extensions_target_info(origin, target)
 
     with Pool() as pool:
         logger.info(
-            ' getting data extensions pages from origin with target info',
+            'getting data extensions pages from origin with target info',
         )
         data_extensions = list(
             session.query(DataExtension).filter(
@@ -384,7 +382,7 @@ def populate(origin, target):
 
         if len(data_extensions) == 0:
             logger.info(
-                ' there are no data extensions',
+                'there are no data extensions',
             )
             return 0
 
@@ -399,24 +397,28 @@ def populate(origin, target):
             get_page_items_and_append_target_data, create_page_items,
         )
 
-        logger.info(' this process may take a while')
+        logger.info('this process may take a while')
 
-        logger.info(' executing pipeline')
-        data_extesion_pages = list(
-            session.query(DataExtensionPage).filter_by(
-                status='new',
-            ).join(DataExtensionPage.data_extension),
-        )
+        logger.info('executing pipeline')
+        data_extension_pages = list(
+                session.query(DataExtensionPage).filter_by(
+                    status='processed',
+                ).join(DataExtensionPage.data_extension),
+            )
 
-        if len(data_extesion_pages) == 0:
+        if update_only:
+            data_extension_pages = [page for page in data_extension_pages if page.has_sfmc_key]
+
+
+        if len(data_extension_pages) == 0:
             logger.info(
-                ' there are no data extension pages',
+                'there are no data extension pages',
             )
             return 0
 
         data_extension_pages_tupled = []
 
-        for data_extesion_page in data_extesion_pages:
+        for data_extesion_page in data_extension_pages:
             data_extension_pages_tupled.append(
                 (data_extesion_page, origin, target),
             )
@@ -424,7 +426,7 @@ def populate(origin, target):
         pool.starmap(pipeline, data_extension_pages_tupled)
 
     time_elapsed = datetime.now() - start_time
-    logger.info(f' end of populate (hh:mm:ss.ms) {time_elapsed}')
+    logger.info(f'end of populate (hh:mm:ss.ms) {time_elapsed}')
     return 0
 
 
@@ -432,7 +434,7 @@ def clean(target):
     initialize_database()
 
     start_time = datetime.now()
-    logger.info(' start of clean')
+    logger.info('start of clean')
 
     print(
         f'\n{tabulate([item for item in target.items()])}\n',  # noqa: E501
@@ -461,12 +463,12 @@ def clean(target):
         data_extension_tupled.append((data_extension, target))
 
     with Pool() as pool:
-        logger.info(' cleaning all data extensions')
-        logger.info(' this process may take a while')
+        logger.info('cleaning all data extensions')
+        logger.info('this process may take a while')
         pool.starmap(clean_data_extension, data_extension_tupled)
 
     time_elapsed = datetime.now() - start_time
-    logger.info(f' end of clean (hh:mm:ss.ms) {time_elapsed}')
+    logger.info(f'end of clean (hh:mm:ss.ms) {time_elapsed}')
     return 0
 
 
@@ -474,7 +476,7 @@ def report(target):
     initialize_database()
 
     start_time = datetime.now()
-    logger.info(' start of report')
+    logger.info('start of report')
 
     data_extensions = list(
         session.query(
@@ -493,8 +495,8 @@ def report(target):
         data_extension_tupled.append((data_extension, target))
 
     with Pool() as pool:
-        logger.info(' generating report for all data extensions')
-        logger.info(' this process may take a while')
+        logger.info('generating report for all data extensions')
+        logger.info('this process may take a while')
         results = pool.starmap(
             generate_report_for_data_extension, data_extension_tupled,
         )
@@ -523,5 +525,5 @@ def report(target):
     logger.info('results are also available in the file reports.csv')
 
     time_elapsed = datetime.now() - start_time
-    logger.info(f' end of clean (hh:mm:ss.ms) {time_elapsed}')
+    logger.info(f'end of clean (hh:mm:ss.ms) {time_elapsed}')
     return 0

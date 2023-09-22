@@ -22,9 +22,10 @@ def main() -> int:
         list    - list available environments
         remove  - delete a environment
 
-    sfmc populate {origin environment} {target environment}
+    sfmc populate {origin environment} {target environment} --update-only
         {origin environment} - name of an existing environment to get data from
         {target environment} - name of an existing environment to insert
+        --update-only (optional) - only updates data extensions with a primary key
     the data
 
     sfmc clean {environment}
@@ -76,6 +77,11 @@ def main() -> int:
         'target',
         type=str,
         help='name of an existing environment to insert the data',
+    )
+    populate_parser.add_argument(
+        '--update-only',
+        action='store_true',
+        help='only updates data extensions with a primary key'
     )
     populate_parser.set_defaults(func=populate_handler)
 

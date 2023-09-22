@@ -119,7 +119,7 @@ def populate_handler(args):
         print('provide a valid target environment name')
         return 1
 
-    populate(origin, target)
+    populate(origin, target, args.update_only)
 
     return 0
 
